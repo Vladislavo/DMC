@@ -1,0 +1,608 @@
+;****************************************************************************************
+;*										     				 	*
+;*	DISEÑO DE SISTEMAS BASADOS EN MICROCONTROLADORES. CURSO 2010/2011       	 	*
+;*	PRACTICA 2	: diodointerrupciones3DKM16C.a30				        		*
+;*	FUNCION 	:  Enciende/Apaga el diodo cada segundo (interrupcion del TA0)		*
+;*				Diodo conectado pin 0 del puerto 2						*
+;*										       				*
+;****************************************************************************************
+;
+;----- INCLUYE FICHERO SFR -------------------------------------------------------------- 
+;
+	.list off
+	.include sfr62s.inc
+	.list on
+;
+;----- DEFINICIÓN DE SÍMBOLOS 3DKM16C ---------------------------------------------------
+;
+VramTOP		.equ	000400h		; inicio de la RAM interna
+VramEND		.equ	007CFFh		; final de la RAM interna
+VprogTOP	.equ	0A0000h		; inicio del area de programa
+Vvector		.equ	0FFFDCh		; inicio tabla de interrupciones fija
+Vintbase	.equ	0FA000h		; inicio tabla de interrupciones variable
+VIstack		.equ	007CFFh		; puntero de pila (SP)
+SB_base		.equ	000380h		; dirección base de SB
+;
+;----- AREA DE DATOS RAM ----------------------------------------------------------------
+;
+	.section	memory,data
+	.org	VramTOP
+curst0: 	.blkb 	1
+sent0: 		.blkb   1
+curst1: 	.blkb 	1
+sent1: 		.blkb   1
+movst1: 	.blkb 	1
+curst2: 	.blkb 	1
+sent2: 		.blkb   1
+curst3: 	.blkb 	1
+sent3: 		.blkb   1
+movst2: 	.blkb 	1
+r4:			.blkb	1
+;
+;----- AREA DE PROGRAMA ROM  ------------------------------------------------------------
+ 	.section	prog,code
+	.org	VprogTOP
+;
+;----- limpieza de la RAM e inicializaci¢n de temporizador y puertos  -------------------
+;
+reset:
+	mov.b 	#0, curst0 		; flags de estado del motor 0
+	mov.b 	#0, sent0		; el sentido del motor cw
+	mov.b 	#0, curst1 		; flags de estado del motor 1
+	mov.b 	#0, sent1		; el sentido del motor cw
+	mov.w 	#0, r0
+	mov.w 	#0, r1
+	mov.b 	#0, movst1
+	mov.b 	#0, r4
+	
+	mov.w	#(VramEND+1-VramTOP)/2,R3
+	mov.w	#VramTOP,A1
+	sstr.w
+
+	ldintb	#Tabla_Vector_Usuario	; Necesito dummy
+	
+	bset 	pd2_0			; ajustamos leds. funcionamiento brazo 1
+	bset 	pd2_2			; funcionamiento brazo 2
+	bset 	pd2_7			; indicador de falta de la alimentacion
+	bset 	pd2_1
+	bset 	pd2_3
+	bset 	pd2_4
+	bset 	pd2_5
+	bset 	pd2_6
+	
+	bset	pd1_0			; P1_[0-3] como la salida motor brazo 1
+	bset	pd1_1
+	bset	pd1_2
+	bset	pd1_3
+	
+	bset	pd1_4			; P1_[4-7] como la salida motor mano 1
+	bset	pd1_5
+	bset	pd1_6
+	bset	pd1_7
+	
+	bset	pd10_0			; P1_[0-3] como la salida motor brazo 2
+	bset	pd10_1
+	bset	pd10_2
+	bset	pd10_3
+	
+	bset	pd10_4			; P1_[4-7] como la salida motor mano 2
+	bset	pd10_5
+	bset	pd10_6
+	bset	pd10_7
+	
+	bnot 	p1_0			; estado inicial de los motores brazo 1
+	bnot 	p1_3
+	
+	bnot 	p1_4			
+	bnot 	p1_7
+	
+	bnot 	p10_0			; estado inicial de los motores brazo 2
+	bnot 	p10_3
+	
+	bnot 	p10_4			
+	bnot 	p10_7
+
+	mov.b	#40h,ta0mr		; TA0 en modo contador con f32
+	mov.b	#1,ta0ic		; Limpia el bit de peticion de interrupcion. Nivel de prioridad 1	
+    mov.w	#8000,ta0		; 2250 periodos de 27,77ns*32= 2 ms. (el reloj es de 36MHz)
+	;bset	ta0s			; arranca el contador
+	
+	mov.b 	#0, ta1mr
+	mov.b 	#1, ta1ic
+	mov.w	#8000,ta1
+	;bset	ta1s			; arranca el contador
+	
+	mov.b	#40h,ta2mr		; TA0 en modo contador con f32
+	mov.b	#1,ta2ic		; Limpia el bit de peticion de interrupcion. Nivel de prioridad 1	
+    mov.w	#8000,ta2		; 2250 periodos de 27,77ns*32= 2 ms. (el reloj es de 36MHz)
+	;bset	ta0s			; arranca el contador
+	
+	mov.b 	#0, ta3mr
+	mov.b 	#1, ta3ic
+	mov.w	#8000,ta3
+	;bset	ta1s			; arranca el contador
+	
+	mov.b 	#40h, ta4mr
+	mov.b 	#1, ta4ic
+	mov.w	#65000,ta4
+	;bset	ta1s			; arranca el contador
+	
+	mov.b 	#01h, int0ic 	; interrupcion por el boton int0
+	mov.b 	#01h, int1ic 	; interrupcion por el boton int1
+	
+	mov.w 	#88h, adcon0		; canal 0, modo repeat, disparo SW y f/2
+	mov.w 	#20h, adcon1		; modo 8-bits, Vref conectado
+	mov.w 	#15h, adcon2		; Selects fAD divided by 3, fAD divided
+								;   by 6, or fAD divided by 12.
+								;   Muestreo y retención (sin agrupacion 23)
+								; 1 0 : Port P0 group is selected
+	
+	bset 	adst				; comienzo conversión AD
+;
+;----- programa principal -----------------------------------------------------------------
+;
+main:
+	jmp	main
+	
+;----- manejadores del robot brazo 1 -------------------------------------------------------
+;----- manejador de la rutina de interrupcion del TA0 --------------------------------------
+;
+sw_ta0:
+	add.w #1, r0
+	cmp.w #6400, r0
+	jnz fol1
+	add.b #1, movst1
+	xor.b #1, sent0
+	mov.w #0, r0
+	bnot 	ta0s	; parar el brazo mientras trabaja fijador
+	bset 	ta1s 	; ha movido el brazo -> mandar a sujetar el producto
+	jmp ex
+fol1:
+	cmp.b sent0, 0
+	jz cw
+	jmp ccw
+	
+ccw:cmp.b curst0, 0 	; 3-0-1
+	jnz n01
+	cmp.b curst0, 1		; 0-1-2
+	jnz n12
+	cmp.b curst0, 2		; 1-2-3
+	jnz n23
+	cmp.b curst0, 3		; 2-3-0
+	jnz n30
+	
+n01:	bnot p1_2
+		bnot p1_3
+		add.b #1, curst0
+		jmp ex
+
+n12:	bnot p1_0
+		bnot p1_1
+		add.b #1, curst0
+		jmp ex
+
+n23:	bnot p1_2
+		bnot p1_3
+		add.b #1, curst0
+		jmp ex
+
+n30:	bnot p1_0
+		bnot p1_1
+		mov.b #0, curst0
+		jmp ex
+		
+cw:	cmp.b curst0, 0 	; 3-0-1
+	jnz nn01
+	cmp.b curst0, 1		; 0-1-2
+	jnz nn12
+	cmp.b curst0, 2		; 1-2-3
+	jnz nn23
+	cmp.b curst0, 3		; 2-3-0
+	jnz nn30
+	
+nn01:	bnot p1_0
+		bnot p1_1
+		add.b #1, curst0
+		jmp ex
+
+nn12:	bnot p1_2
+		bnot p1_3
+		add.b #1, curst0
+		jmp ex
+
+nn23:	bnot p1_0
+		bnot p1_1
+		add.b #1, curst0
+		jmp ex
+
+nn30:	bnot p1_2
+		bnot p1_3
+		mov.b #0, curst0
+		jmp ex
+
+ex: 	reit
+
+;----- manejador de la rutina de interrupcion del TA1 --------------------------------------
+;
+sw_ta1:
+	cmp.b sent1, 0
+	jz cw2
+	jmp ccw2
+	
+ccw2:
+	cmp.b curst1, 0 	; 3-0-1
+	jnz n01ex
+	cmp.b curst1, 1		; 0-1-2
+	jnz n12ex
+	cmp.b curst1, 2		; 1-2-3
+	jnz n23ex
+	cmp.b curst1, 3		; 2-3-0
+	jnz n30ex
+	
+n01ex:	bnot p1_6
+		bnot p1_7
+		add.b #1, curst1
+		jmp ex2
+
+n12ex:	bnot p1_4
+		bnot p1_5
+		add.b #1, curst1
+		jmp ex2
+
+n23ex:	bnot p1_6
+		bnot p1_7
+		add.b #1, curst1
+		jmp ex2
+
+n30ex:	bnot p1_4
+		bnot p1_5
+		mov.b #0, curst1
+		jmp ex2
+		
+cw2:cmp.b curst1, 0 	; 3-0-1
+	jnz nn01ex
+	cmp.b curst1, 1		; 0-1-2
+	jnz nn12ex
+	cmp.b curst1, 2		; 1-2-3
+	jnz nn23ex
+	cmp.b curst1, 3		; 2-3-0
+	jnz nn30ex
+	
+nn01ex:	bnot p1_4
+		bnot p1_5
+		add.b #1, curst1
+		jmp ex2
+
+nn12ex:	bnot p1_6
+		bnot p1_7
+		add.b #1, curst1
+		jmp ex2
+
+nn23ex:	bnot p1_4
+		bnot p1_5
+		add.b #1, curst1
+		jmp ex2
+
+nn30ex:	bnot p1_6
+		bnot p1_7
+		mov.b #0, curst1
+		jmp ex2
+
+ex2:
+		add.w #1, r1
+		cmp.w #6400, r1
+		jnz fol2
+		cmp.b #2, movst1
+		jz mov1fin
+		xor.b #1, sent1
+		mov.w #0, r1
+		bnot 	ta1s 	; parar el fijador
+		bset 	ta0s	; mandar a girar el brazo
+fol2:	reit
+
+mov1fin:
+		xor.b #1, sent1
+		mov.w #0, r1
+		mov.b #0, movst1
+		bnot 	ta1s
+		bnot 	p2_0
+		jmp 	fol2
+
+;----- manejadores del robot brazo 2 -------------------------------------------------------
+;----- manejador de la rutina de interrupcion del TA2 --------------------------------------
+;
+sw_ta2:
+	add.w #1, r2
+	cmp.w #6400, r2
+	jnz fol11
+	add.b #1, movst2
+	xor.b #1, sent2
+	mov.w #0, r2
+	bnot 	ta2s	; parar el brazo mientras trabaja fijador
+	bset 	ta3s 	; ha movido el brazo -> mandar a sujetar el producto
+	jmp ex3
+fol11:
+	cmp.b sent2, 0
+	jz cw11
+	jmp ccw11
+	
+ccw11:
+	cmp.b curst2, 0 	; 3-0-1
+	jnz n01ex1
+	cmp.b curst2, 1		; 0-1-2
+	jnz n12ex1
+	cmp.b curst2, 2		; 1-2-3
+	jnz n23ex1
+	cmp.b curst2, 3		; 2-3-0
+	jnz n30ex1
+	
+n01ex1:	bnot p10_2
+		bnot p10_3
+		add.b #1, curst2
+		jmp ex3
+
+n12ex1:	bnot p10_0
+		bnot p10_1
+		add.b #1, curst2
+		jmp ex3
+
+n23ex1:	bnot p10_2
+		bnot p10_3
+		add.b #1, curst2
+		jmp ex3
+
+n30ex1:	bnot p10_0
+		bnot p10_1
+		mov.b #0, curst2
+		jmp ex3
+		
+cw11:	
+	cmp.b curst2, 0 	; 3-0-1
+	jnz nn01ex1
+	cmp.b curst2, 1		; 0-1-2
+	jnz nn12ex1
+	cmp.b curst2, 2		; 1-2-3
+	jnz nn23ex1
+	cmp.b curst2, 3		; 2-3-0
+	jnz nn30ex1
+	
+nn01ex1:	bnot p10_0
+		bnot p10_1
+		add.b #1, curst2
+		jmp ex3
+
+nn12ex1:	bnot p10_2
+		bnot p10_3
+		add.b #1, curst2
+		jmp ex3
+
+nn23ex1:	bnot p10_0
+		bnot p10_1
+		add.b #1, curst2
+		jmp ex3
+
+nn30ex1:	bnot p10_2
+		bnot p10_3
+		mov.b #0, curst2
+		jmp ex3
+
+ex3: 	reit
+
+;----- manejador de la rutina de interrupcion del TA3 --------------------------------------
+;
+sw_ta3:
+	cmp.b sent3, 0
+	jz cw22
+	jmp ccw22
+	
+ccw22:
+	cmp.b curst3, 0 	; 3-0-1
+	jnz n01ex2
+	cmp.b curst3, 1		; 0-1-2
+	jnz n12ex2
+	cmp.b curst3, 2		; 1-2-3
+	jnz n23ex2
+	cmp.b curst3, 3		; 2-3-0
+	jnz n30ex2
+	
+n01ex2:	bnot p10_6
+		bnot p10_7
+		add.b #1, curst3
+		jmp ex22
+
+n12ex2:	bnot p10_4
+		bnot p10_5
+		add.b #1, curst3
+		jmp ex22
+
+n23ex2:	bnot p10_6
+		bnot p10_7
+		add.b #1, curst3
+		jmp ex22
+
+n30ex2:	bnot p10_4
+		bnot p10_5
+		mov.b #0, curst3
+		jmp ex22
+		
+cw22:
+	cmp.b curst3, 0 	; 3-0-1
+	jnz nn01ex2
+	cmp.b curst3, 1		; 0-1-2
+	jnz nn12ex2
+	cmp.b curst3, 2		; 1-2-3
+	jnz nn23ex2
+	cmp.b curst3, 3		; 2-3-0
+	jnz nn30ex2
+	
+nn01ex2:	bnot p10_4
+		bnot p10_5
+		add.b #1, curst3
+		jmp ex22
+
+nn12ex2:	bnot p10_6
+		bnot p10_7
+		add.b #1, curst3
+		jmp ex22
+
+nn23ex2:	bnot p10_4
+		bnot p10_5
+		add.b #1, curst3
+		jmp ex2
+
+nn30ex2:	bnot p10_6
+		bnot p10_7
+		mov.b #0, curst3
+		jmp ex22
+
+ex22:
+		add.w #1, r3
+		cmp.w #6400, r3
+		jnz fol22
+		cmp.b #2, movst2
+		jz mov1fin2
+		xor.b #1, sent3
+		mov.w #0, r3
+		bnot 	ta3s 	; parar el fijador
+		bset 	ta2s	; mandar a girar el brazo
+fol22:	reit
+
+mov1fin2:
+		xor.b #1, sent3
+		mov.w #0, r3
+		mov.b #0, movst2
+		bnot 	ta3s
+		bnot 	p2_2
+		jmp 	fol22
+;
+;----- manejador de la rutina de interrupcion del INT0 --------------------------------------
+;
+sw_int0:
+	pop.w 	r0
+	mov.w 	ad0l, r0
+	cmp.w 	#200, r0	; condicion
+	jc ok
+	bset 	ta4s
+	jmp fin
+ok:	bclr 	ta4s
+	bclr 	p2_7
+	btst 	p2_0
+	jnz fin
+	bnot	p2_0
+	bset 	ta0s
+	push.w 	r0
+fin:reit
+;
+;----- manejador de la rutina de interrupcion del INT1 --------------------------------------
+;
+sw_int1:
+	pop.w 	r0
+	mov.w 	ad0l, r0
+	cmp.w 	#200, r0	; condicion
+	jc ok1
+	bset 	ta4s
+	jmp fin1
+ok1:bclr 	ta4s
+	bclr 	p2_7
+	btst 	p2_2
+	jnz fin1
+	bnot	p2_2
+	bset 	ta2s
+	push.w 	r0
+fin1:reit
+;
+;----- manejador de la rutina de interrupcion del TA3 --------------------------------------
+;
+sw_ta4:
+	add.b 	#1, r4
+	cmp.b 	r4, 200
+	jnz go
+	mov.w 	#0, r4
+	bnot 	p2_7
+go:	reit
+;
+;----- manejador de la rutina dummy --------------------------------------------------------
+;
+dummy:
+	reit
+;
+;----- interrupci¢n del temporizador TA0 (tabla de vectores variable) ----------------------
+	.section	int_ta0,romdata
+	.org		Vintbase
+Tabla_Vector_Usuario:
+	.lword		dummy		; No0  Break Interrupt
+	.lword		dummy		; No1  Break Interrupt
+	.lword		dummy		; No2  Break Interrupt
+	.lword		dummy		; No3  Break Interrupt
+	.lword		dummy		; No4  Break Interrupt
+	.lword		dummy		; No5  Break Interrupt
+	.lword		dummy		; No6  Break Interrupt
+	.lword		dummy		; No7  Break Interrupt
+	.lword		dummy		; No8  Break Interrupt
+	.lword		dummy		; No9  Break Interrupt
+	.lword		dummy		; No10 Bus Clash Detect
+	.lword		dummy		; No11 DMA0 
+	.lword		dummy		; No12 DMA1 
+	.lword		dummy		; No13 KEY IN Interrupt
+	.lword		dummy	   	; No14 A-D Interrupt
+	.lword		dummy		; No15 UART2 Transmission Interrupt
+	.lword		dummy		; No16 UART2 receive Interrupt
+	.lword		dummy		; No17 UART0 Transmission Interrupt
+	.lword		dummy		; No18 UART0 receive Interrupt
+	.lword		0FF900H	; No19 UART1 Transmission Interrupt
+	.lword		0FF900H	; No20 UART1 receive Interrupt
+	.lword		sw_ta0	; No21 TimerA0 Interrupt
+	.lword		sw_ta1  ; No22 TimerA1 Interrupt
+	.lword		sw_ta2	; No23 TimerA2 Interrupt
+	.lword		sw_ta3	; No24 TimerA3 Interrupt
+	.lword		sw_ta4	; No25 TimerA4 Interrupt
+	.lword		dummy		; No26 TimerB0 Interrupt
+	.lword		dummy		; No27 TimerB1 Interrupt
+	.lword		dummy		; No28 TimerB2 Interrupt
+	.lword		sw_int0	; No29 INIT0(Active Low) Interrupt
+	.lword		sw_int1	; No30 INIT1(Active Low) Interrupt
+	.lword		dummy		; No31 INIT2(Active Low) Interrupt
+	.lword		dummy		; No32 S/W Interrupt
+	.lword		dummy		; No33 S/W Interrupt
+	.lword		dummy		; No34 S/W Interrupt
+	.lword		dummy		; No35 S/W Interrupt
+	.lword		dummy		; No36 S/W Interrupt
+	.lword		dummy		; No37 S/W Interrupt
+	.lword		dummy		; No38 S/W Interrupt
+	.lword		dummy		; No39 S/W Interrupt
+	.lword		dummy		; No40 S/W Interrupt
+	.lword		dummy		; No41 S/W Interrupt
+	.lword		dummy		; No42 S/W Interrupt
+	.lword		dummy		; No43 S/W Interrupt
+	.lword		dummy		; No44 S/W Interrupt
+	.lword		dummy		; No45 S/W Interrupt
+	.lword		dummy		; No46 S/W Interrupt
+	.lword		dummy		; No47 S/W Interrupt
+	.lword		dummy		; No48 S/W Interrupt
+	.lword		dummy		; No49 S/W Interrupt
+	.lword		dummy		; No50 S/W Interrupt
+	.lword		dummy		; No51 S/W Interrupt
+	.lword		dummy		; No52 S/W Interrupt
+	.lword		dummy		; No53 S/W Interrupt
+	.lword		dummy		; No54 S/W Interrupt
+	.lword		dummy		; No55 S/W Interrupt
+	.lword		dummy		; No56 S/W Interrupt
+	.lword		dummy		; No57 S/W Interrupt
+	.lword		dummy		; No58 S/W Interrupt
+	.lword		dummy		; No59 S/W Interrupt
+	.lword		dummy		; No60 S/W Interrupt
+	.lword		dummy		; No61 S/W Interrupt
+	.lword		dummy		; No62 S/W Interrupt
+	.lword		dummy		; No63 S/W Interrupt
+;
+;----- interrupci¢n de reset (tabla de vectores fija) ------------------------------------------
+;
+	.section	int_reset,romdata
+	.org		Vvector+(8*4)
+	.lword		reset
+;
+;----- program end -----------------------------------------------------------------------------
+;
+	.end
+;
+

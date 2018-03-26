@@ -1,0 +1,50 @@
+##########################################
+# (1) LINK INFORMATION                   #
+##########################################
+C:\MTOOL\BIN\ln30.exe -MS C:\PracticasDMC\Final_Project\FINAL_PROJECT_3DKM16C.R30
+
+# LINK FILE INFORMATION
+FINAL_PROJECT_3DKM16C (C:\PracticasDMC\Final_Project\FINAL_PROJECT_3DKM16C.R30)
+	Jun  5 16:55:15 2017
+	
+
+##########################################
+# (2) SECTION INFORMATION                #
+##########################################
+# SECTION                        ATR TYPE    START  LENGTH ALIGN MODULENAME
+memory                           ABS DATA    000400 00000B       FINAL_PROJECT_3DKM16C
+prog                             ABS CODE    0A0000 0004FE       FINAL_PROJECT_3DKM16C
+int_ta0                          ABS ROMDATA 0FA000 000100       FINAL_PROJECT_3DKM16C
+int_reset                        ABS ROMDATA 0FFFFC 000004       FINAL_PROJECT_3DKM16C
+# Total -------------------------------------------------------------------
+                                     DATA           00000B(0000011) Byte(s)
+                                     ROMDATA        000104(0000260) Byte(s)
+                                     CODE           0004FE(0001278) Byte(s)
+
+##########################################
+# (3) GLOBAL LABEL INFORMATION           #
+##########################################
+
+##########################################
+# (4) GLOBAL EQU SYMBOL INFORMATION      #
+##########################################
+
+##########################################
+# (5) GLOBAL EQU BIT-SYMBOL INFORMATION  #
+##########################################
+
+##########################################
+# (6) LOCAL LABEL INFORMATION            #
+##########################################
+@ FINAL_PROJECT_3DKM16C ( C:\PracticasDMC\Final_Project\FINAL_PROJECT_3DKM16C.R30 )
+
+##########################################
+# (7) LOCAL EQU SYMBOL INFORMATION       #
+##########################################
+@ FINAL_PROJECT_3DKM16C ( C:\PracticasDMC\Final_Project\FINAL_PROJECT_3DKM16C.R30 )
+
+##########################################
+# (8) LOCAL EQU BIT-SYMBOL INFORMATION   #
+##########################################
+@ FINAL_PROJECT_3DKM16C ( C:\PracticasDMC\Final_Project\FINAL_PROJECT_3DKM16C.R30 )
+

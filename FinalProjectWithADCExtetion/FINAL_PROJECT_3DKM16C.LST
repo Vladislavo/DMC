@@ -1,0 +1,660 @@
+* M16C FAMILY ASSEMBLER *   SOURCE LIST       Mon Jun  5 16:55:15 2017  PAGE 001
+
+  SEQ.  LOC.   OBJ.              0XMSDA ....*....SOURCE STATEMENT....7....*....8....*....9....*....0....*....1....*....2....*....3....*....4
+
+     1                                  ;****************************************************************************************
+     2                                  ;*										     			
+     3                                  ;*	DISEÑO DE SISTEMAS BASADOS EN MICROCONTROLADORES. CURSO 2010/2011       	 	*
+     4                                  ;*	PRACTICA 2	: diodointerrupciones3DKM16C.a30				        	
+     5                                  ;*	FUNCION 	:  Enciende/Apaga el diodo cada segundo (interrupcion del TA0)		*
+     6                                  ;*				Diodo conectado pin 0 del puerto 2					
+     7                                  ;*										       			
+     8                                  ;****************************************************************************************
+     9                                  ;
+    10                                  ;----- INCLUYE FICHERO SFR -------------------------------------------------------------- 
+    11                                  ;
+    12                                  	.list off
+    13                                  	.list on
+    14                                  ;
+    15                                  ;----- DEFINICIÓN DE SÍMBOLOS 3DKM16C ---------------------------------------------------
+    16                                  ;
+    17  00000400h                       VramTOP		.equ	000400h		; inicio de la RAM interna
+    18  00007CFFh                       VramEND		.equ	007CFFh		; final de la RAM interna
+    19  000A0000h                       VprogTOP	.equ	0A0000h		; inicio del area de programa
+    20  000FFFDCh                       Vvector		.equ	0FFFDCh		; inicio tabla de interrupciones fija
+    21  000FA000h                       Vintbase	.equ	0FA000h		; inicio tabla de interrupciones variable
+    22  00007CFFh                       VIstack		.equ	007CFFh		; puntero de pila (SP)
+    23  00000380h                       SB_base		.equ	000380h		; dirección base de SB
+    24                                  ;
+    25                                  ;----- AREA DE DATOS RAM ----------------------------------------------------------------
+    26                                  ;
+    27                                  	.section	memory,data
+    28  00400                           	.org	VramTOP
+    29  00400(000001H)                  curst0: 	.blkb 	1
+    30  00401(000001H)                  sent0: 		.blkb   1
+    31  00402(000001H)                  curst1: 	.blkb 	1
+    32  00403(000001H)                  sent1: 		.blkb   1
+    33  00404(000001H)                  movst1: 	.blkb 	1
+    34  00405(000001H)                  curst2: 	.blkb 	1
+    35  00406(000001H)                  sent2: 		.blkb   1
+    36  00407(000001H)                  curst3: 	.blkb 	1
+    37  00408(000001H)                  sent3: 		.blkb   1
+    38  00409(000001H)                  movst2: 	.blkb 	1
+    39  0040A(000001H)                  r4:			.blkb	1
+    40                                  ;
+    41                                  ;----- AREA DE PROGRAMA ROM  ------------------------------------------------------------
+    42                                   	.section	prog,code
+    43  A0000                           	.org	VprogTOP
+    44                                  ;
+    45                                  ;----- limpieza de la RAM e inicializaci¢n de temporizador y puertos  -------------------
+    46                                  ;
+    47  A0000                           reset:
+    48  A0000  B70004                Z  	mov.b 	#0, curst0 		; flags de estado del motor 0
+    49  A0003  B70104                Z  	mov.b 	#0, sent0		; el sentido del motor cw
+    50  A0006  B70204                Z  	mov.b 	#0, curst1 		; flags de estado del motor 1
+    51  A0009  B70304                Z  	mov.b 	#0, sent1		; el sentido del motor cw
+    52  A000C  D900                  Q  	mov.w 	#0, r0
+    53  A000E  D901                  Q  	mov.w 	#0, r1
+    54  A0010  B70404                Z  	mov.b 	#0, movst1
+    55  A0013  B70A04                Z  	mov.b 	#0, r4
+    56                                  	
+    57  A0016  75C3803C                 	mov.w	#(VramEND+1-VramTOP)/2,R3
+    58  A001A  AA0004                S  	mov.w	#VramTOP,A1
+    59  A001D  7DEA                     	sstr.w
+    60                                  
+    61  A001F  EB200F00                 	ldintb	#Tabla_Vector_Usuario	; Necesito dummy
+               EB1000A0 
+* M16C FAMILY ASSEMBLER *   SOURCE LIST       Mon Jun  5 16:55:15 2017  PAGE 002
+
+  SEQ.  LOC.   OBJ.              0XMSDA ....*....SOURCE STATEMENT....7....*....8....*....9....*....0....*....1....*....2....*....3....*....4
+
+    62                                  	
+    63  A0027  7E9F301F                 	bset 	pd2_0			; ajustamos leds. funcionamiento brazo 1
+    64  A002B  7E9F321F                 	bset 	pd2_2			; funcionamiento brazo 2
+    65  A002F  7E9F371F                 	bset 	pd2_7			; indicador de falta de la alimentacion
+    66  A0033  7E9F311F                 	bset 	pd2_1
+    67  A0037  7E9F331F                 	bset 	pd2_3
+    68  A003B  7E9F341F                 	bset 	pd2_4
+    69  A003F  7E9F351F                 	bset 	pd2_5
+    70  A0043  7E9F361F                 	bset 	pd2_6
+    71                                  	
+    72  A0047  7E9F181F                 	bset	pd1_0			; P1_[0-3] como la salida motor brazo 1
+    73  A004B  7E9F191F                 	bset	pd1_1
+    74  A004F  7E9F1A1F                 	bset	pd1_2
+    75  A0053  7E9F1B1F                 	bset	pd1_3
+    76                                  	
+    77  A0057  7E9F1C1F                 	bset	pd1_4			; P1_[4-7] como la salida motor mano 1
+    78  A005B  7E9F1D1F                 	bset	pd1_5
+    79  A005F  7E9F1E1F                 	bset	pd1_6
+    80  A0063  7E9F1F1F                 	bset	pd1_7
+    81                                  	
+    82  A0067  7E9FB01F                 	bset	pd10_0			; P1_[0-3] como la salida motor brazo 2
+    83  A006B  7E9FB11F                 	bset	pd10_1
+    84  A006F  7E9FB21F                 	bset	pd10_2
+    85  A0073  7E9FB31F                 	bset	pd10_3
+    86                                  	
+    87  A0077  7E9FB41F                 	bset	pd10_4			; P1_[4-7] como la salida motor mano 2
+    88  A007B  7E9FB51F                 	bset	pd10_5
+    89  A007F  7E9FB61F                 	bset	pd10_6
+    90  A0083  7E9FB71F                 	bset	pd10_7
+    91                                  	
+    92  A0087  7EAF081F                 	bnot 	p1_0			; estado inicial de los motores brazo 1
+    93  A008B  7EAF0B1F                 	bnot 	p1_3
+    94                                  	
+    95  A008F  7EAF0C1F                 	bnot 	p1_4			
+    96  A0093  7EAF0F1F                 	bnot 	p1_7
+    97                                  	
+    98  A0097  7EAFA01F                 	bnot 	p10_0			; estado inicial de los motores brazo 2
+    99  A009B  7EAFA31F                 	bnot 	p10_3
+   100                                  	
+   101  A009F  7EAFA41F                 	bnot 	p10_4			
+   102  A00A3  7EAFA71F                 	bnot 	p10_7
+   103                                  
+   104  A00A7  C7409603              S  	mov.b	#40h,ta0mr		; TA0 en modo contador con f32
+   105  A00AB  C7015500              S  	mov.b	#1,ta0ic		; Limpia el bit de peticion de interrupcion. Nivel de priori
+   106  A00AF  75CF8603401F                 mov.w	#8000,ta0		; 2250 periodos de 27,77ns*32= 2 ms. (el reloj es de 36MHz)
+   107                                  	;bset	ta0s			; arranca el contador
+   108                                  	
+   109  A00B5  B79703                Z  	mov.b 	#0, ta1mr
+   110  A00B8  C7015600              S  	mov.b 	#1, ta1ic
+   111  A00BC  75CF8803401F             	mov.w	#8000,ta1
+   112                                  	;bset	ta1s			; arranca el contador
+   113                                  	
+   114  A00C2  C7409803              S  	mov.b	#40h,ta2mr		; TA0 en modo contador con f32
+   115  A00C6  C7015700              S  	mov.b	#1,ta2ic		; Limpia el bit de peticion de interrupcion. Nivel de priori
+   116  A00CA  75CF8A03401F                 mov.w	#8000,ta2		; 2250 periodos de 27,77ns*32= 2 ms. (el reloj es de 36MHz)
+   117                                  	;bset	ta0s			; arranca el contador
+   118                                  	
+   119  A00D0  B79903                Z  	mov.b 	#0, ta3mr
+   120  A00D3  C7015800              S  	mov.b 	#1, ta3ic
+   121  A00D7  75CF8C03401F             	mov.w	#8000,ta3
+   122                                  	;bset	ta1s			; arranca el contador
+   123                                  	
+* M16C FAMILY ASSEMBLER *   SOURCE LIST       Mon Jun  5 16:55:15 2017  PAGE 003
+
+  SEQ.  LOC.   OBJ.              0XMSDA ....*....SOURCE STATEMENT....7....*....8....*....9....*....0....*....1....*....2....*....3....*....4
+
+   124  A00DD  C7409A03              S  	mov.b 	#40h, ta4mr
+   125  A00E1  C7015900              S  	mov.b 	#1, ta4ic
+   126  A00E5  75CF8E03E8FD             	mov.w	#65000,ta4
+   127                                  	;bset	ta1s			; arranca el contador
+   128                                  	
+   129  A00EB  C7015D00              S  	mov.b 	#01h, int0ic 	; interrupcion por el boton int0
+   130  A00EF  C7015E00              S  	mov.b 	#01h, int1ic 	; interrupcion por el boton int1
+   131                                  	
+   132  A00F3  75CFD6038800             	mov.w 	#88h, adcon0		; canal 0, modo repeat, disparo SW y f/2
+   133  A00F9  75CFD7032000             	mov.w 	#20h, adcon1		; modo 8-bits, Vref conectado
+   134  A00FF  75CFD4031500             	mov.w 	#15h, adcon2		; Selects fAD divided by 3, fAD divided
+   135                                  								;   by 6, or fAD divided by 12.
+   136                                  								;   Muestreo y retención (sin agrupa
+   137                                  								; 1 0 : Port P0 group is selected
+   138                                  	
+   139  A0105  7E9FB61E                 	bset 	adst				; comienzo conversión AD
+   140                                  ;
+   141                                  ;----- programa principal -----------------------------------------------------------------
+   142                                  ;
+   143  A0109                           main:
+   144  A0109  FEFF                  B  	jmp	main
+   145                                  	
+   146                                  ;----- manejadores del robot brazo 1 -------------------------------------------------------
+   147                                  ;----- manejador de la rutina de interrupcion del TA0 --------------------------------------
+   148                                  ;
+   149  A010B                           sw_ta0:
+   150  A010B  C910                  Q  	add.w #1, r0
+   151  A010D  77800019                 	cmp.w #6400, r0
+   152  A0111  6E17                     	jnz fol1
+   153  A0113  87010404              S  	add.b #1, movst1
+   154  A0117  761F010401               	xor.b #1, sent0
+   155  A011C  D900                  Q  	mov.w #0, r0
+   156  A011E  7EAF001C                 	bnot 	ta0s	; parar el brazo mientras trabaja fijador
+   157  A0122  7E9F011C                 	bset 	ta1s 	; ha movido el brazo -> mandar a sujetar el producto
+   158  A0126  F4BB00                W  	jmp ex
+   159  A0129                           fol1:
+   160  A0129  C0FF01040000             	cmp.b sent0, 0
+   161  A012F  6A5B                     	jz cw
+   162  A0131  FE01                  B  	jmp ccw
+   163                                  	
+   164  A0133  C0FF00040000             ccw:cmp.b curst0, 0 	; 3-0-1
+   165  A0139  6E19                     	jnz n01
+   166  A013B  C0FF00040100             	cmp.b curst0, 1		; 0-1-2
+   167  A0141  6E20                     	jnz n12
+   168  A0143  C0FF00040200             	cmp.b curst0, 2		; 1-2-3
+   169  A0149  6E26                     	jnz n23
+   170  A014B  C0FF00040300             	cmp.b curst0, 3		; 2-3-0
+   171  A0151  6E2C                     	jnz n30
+   172                                  	
+   173  A0153  7EAF0A1F                 n01:	bnot p1_2
+   174  A0157  7EAF0B1F                 		bnot p1_3
+   175  A015B  87010004              S  		add.b #1, curst0
+   176  A015F  F48200                W  		jmp ex
+   177                                  
+   178  A0162  7EAF081F                 n12:	bnot p1_0
+   179  A0166  7EAF091F                 		bnot p1_1
+   180  A016A  87010004              S  		add.b #1, curst0
+   181  A016E  FE73                  B  		jmp ex
+   182                                  
+   183  A0170  7EAF0A1F                 n23:	bnot p1_2
+   184  A0174  7EAF0B1F                 		bnot p1_3
+   185  A0178  87010004              S  		add.b #1, curst0
+* M16C FAMILY ASSEMBLER *   SOURCE LIST       Mon Jun  5 16:55:15 2017  PAGE 004
+
+  SEQ.  LOC.   OBJ.              0XMSDA ....*....SOURCE STATEMENT....7....*....8....*....9....*....0....*....1....*....2....*....3....*....4
+
+   186  A017C  FE65                  B  		jmp ex
+   187                                  
+   188  A017E  7EAF081F                 n30:	bnot p1_0
+   189  A0182  7EAF091F                 		bnot p1_1
+   190  A0186  B70004                Z  		mov.b #0, curst0
+   191  A0189  FE58                  B  		jmp ex
+   192                                  		
+   193  A018B  C0FF00040000             cw:	cmp.b curst0, 0 	; 3-0-1
+   194  A0191  6E19                     	jnz nn01
+   195  A0193  C0FF00040100             	cmp.b curst0, 1		; 0-1-2
+   196  A0199  6E1F                     	jnz nn12
+   197  A019B  C0FF00040200             	cmp.b curst0, 2		; 1-2-3
+   198  A01A1  6E25                     	jnz nn23
+   199  A01A3  C0FF00040300             	cmp.b curst0, 3		; 2-3-0
+   200  A01A9  6E2B                     	jnz nn30
+   201                                  	
+   202  A01AB  7EAF081F                 nn01:	bnot p1_0
+   203  A01AF  7EAF091F                 		bnot p1_1
+   204  A01B3  87010004              S  		add.b #1, curst0
+   205  A01B7  FE2A                  B  		jmp ex
+   206                                  
+   207  A01B9  7EAF0A1F                 nn12:	bnot p1_2
+   208  A01BD  7EAF0B1F                 		bnot p1_3
+   209  A01C1  87010004              S  		add.b #1, curst0
+   210  A01C5  FE1C                  B  		jmp ex
+   211                                  
+   212  A01C7  7EAF081F                 nn23:	bnot p1_0
+   213  A01CB  7EAF091F                 		bnot p1_1
+   214  A01CF  87010004              S  		add.b #1, curst0
+   215  A01D3  FE0E                  B  		jmp ex
+   216                                  
+   217  A01D5  7EAF0A1F                 nn30:	bnot p1_2
+   218  A01D9  7EAF0B1F                 		bnot p1_3
+   219  A01DD  B70004                Z  		mov.b #0, curst0
+   220  A01E0  FE01                  B  		jmp ex
+   221                                  
+   222  A01E2  FB                       ex: 	reit
+   223                                  
+   224                                  ;----- manejador de la rutina de interrupcion del TA1 --------------------------------------
+   225                                  ;
+   226  A01E3                           sw_ta1:
+   227  A01E3  C0FF03040000             	cmp.b sent1, 0
+   228  A01E9  6A5B                     	jz cw2
+   229  A01EB  FE01                  B  	jmp ccw2
+   230                                  	
+   231  A01ED                           ccw2:
+   232  A01ED  C0FF02040000             	cmp.b curst1, 0 	; 3-0-1
+   233  A01F3  6E19                     	jnz n01ex
+   234  A01F5  C0FF02040100             	cmp.b curst1, 1		; 0-1-2
+   235  A01FB  6E20                     	jnz n12ex
+   236  A01FD  C0FF02040200             	cmp.b curst1, 2		; 1-2-3
+   237  A0203  6E26                     	jnz n23ex
+   238  A0205  C0FF02040300             	cmp.b curst1, 3		; 2-3-0
+   239  A020B  6E2C                     	jnz n30ex
+   240                                  	
+   241  A020D  7EAF0E1F                 n01ex:	bnot p1_6
+   242  A0211  7EAF0F1F                 		bnot p1_7
+   243  A0215  87010204              S  		add.b #1, curst1
+   244  A0219  F48200                W  		jmp ex2
+   245                                  
+   246  A021C  7EAF0C1F                 n12ex:	bnot p1_4
+   247  A0220  7EAF0D1F                 		bnot p1_5
+* M16C FAMILY ASSEMBLER *   SOURCE LIST       Mon Jun  5 16:55:15 2017  PAGE 005
+
+  SEQ.  LOC.   OBJ.              0XMSDA ....*....SOURCE STATEMENT....7....*....8....*....9....*....0....*....1....*....2....*....3....*....4
+
+   248  A0224  87010204              S  		add.b #1, curst1
+   249  A0228  FE73                  B  		jmp ex2
+   250                                  
+   251  A022A  7EAF0E1F                 n23ex:	bnot p1_6
+   252  A022E  7EAF0F1F                 		bnot p1_7
+   253  A0232  87010204              S  		add.b #1, curst1
+   254  A0236  FE65                  B  		jmp ex2
+   255                                  
+   256  A0238  7EAF0C1F                 n30ex:	bnot p1_4
+   257  A023C  7EAF0D1F                 		bnot p1_5
+   258  A0240  B70204                Z  		mov.b #0, curst1
+   259  A0243  FE58                  B  		jmp ex2
+   260                                  		
+   261  A0245  C0FF02040000             cw2:cmp.b curst1, 0 	; 3-0-1
+   262  A024B  6E19                     	jnz nn01ex
+   263  A024D  C0FF02040100             	cmp.b curst1, 1		; 0-1-2
+   264  A0253  6E1F                     	jnz nn12ex
+   265  A0255  C0FF02040200             	cmp.b curst1, 2		; 1-2-3
+   266  A025B  6E25                     	jnz nn23ex
+   267  A025D  C0FF02040300             	cmp.b curst1, 3		; 2-3-0
+   268  A0263  6E2B                     	jnz nn30ex
+   269                                  	
+   270  A0265  7EAF0C1F                 nn01ex:	bnot p1_4
+   271  A0269  7EAF0D1F                 		bnot p1_5
+   272  A026D  87010204              S  		add.b #1, curst1
+   273  A0271  FE2A                  B  		jmp ex2
+   274                                  
+   275  A0273  7EAF0E1F                 nn12ex:	bnot p1_6
+   276  A0277  7EAF0F1F                 		bnot p1_7
+   277  A027B  87010204              S  		add.b #1, curst1
+   278  A027F  FE1C                  B  		jmp ex2
+   279                                  
+   280  A0281  7EAF0C1F                 nn23ex:	bnot p1_4
+   281  A0285  7EAF0D1F                 		bnot p1_5
+   282  A0289  87010204              S  		add.b #1, curst1
+   283  A028D  FE0E                  B  		jmp ex2
+   284                                  
+   285  A028F  7EAF0E1F                 nn30ex:	bnot p1_6
+   286  A0293  7EAF0F1F                 		bnot p1_7
+   287  A0297  B70204                Z  		mov.b #0, curst1
+   288  A029A  FE01                  B  		jmp ex2
+   289                                  
+   290  A029C                           ex2:
+   291  A029C  C911                  Q  		add.w #1, r1
+   292  A029E  77810019                 		cmp.w #6400, r1
+   293  A02A2  6E16                     		jnz fol2
+   294  A02A4  E7020404              S  		cmp.b #2, movst1
+   295  A02A8  6A11                     		jz mov1fin
+   296  A02AA  761F030401               		xor.b #1, sent1
+   297  A02AF  D901                  Q  		mov.w #0, r1
+   298  A02B1  7EAF011C                 		bnot 	ta1s 	; parar el fijador
+   299  A02B5  7E9F001C                 		bset 	ta0s	; mandar a girar el brazo
+   300  A02B9  FB                       fol2:	reit
+   301                                  
+   302  A02BA                           mov1fin:
+   303  A02BA  761F030401               		xor.b #1, sent1
+   304  A02BF  D901                  Q  		mov.w #0, r1
+   305  A02C1  B70404                Z  		mov.b #0, movst1
+   306  A02C4  7EAF011C                 		bnot 	ta1s
+   307  A02C8  7EAF201F                 		bnot 	p2_0
+   308  A02CC  FEEC                  B  		jmp 	fol2
+   309                                  
+* M16C FAMILY ASSEMBLER *   SOURCE LIST       Mon Jun  5 16:55:15 2017  PAGE 006
+
+  SEQ.  LOC.   OBJ.              0XMSDA ....*....SOURCE STATEMENT....7....*....8....*....9....*....0....*....1....*....2....*....3....*....4
+
+   310                                  ;----- manejadores del robot brazo 2 -------------------------------------------------------
+   311                                  ;----- manejador de la rutina de interrupcion del TA2 --------------------------------------
+   312                                  ;
+   313  A02CE                           sw_ta2:
+   314  A02CE  C912                  Q  	add.w #1, r2
+   315  A02D0  77820019                 	cmp.w #6400, r2
+   316  A02D4  6E17                     	jnz fol11
+   317  A02D6  87010904              S  	add.b #1, movst2
+   318  A02DA  761F060401               	xor.b #1, sent2
+   319  A02DF  D902                  Q  	mov.w #0, r2
+   320  A02E1  7EAF021C                 	bnot 	ta2s	; parar el brazo mientras trabaja fijador
+   321  A02E5  7E9F031C                 	bset 	ta3s 	; ha movido el brazo -> mandar a sujetar el producto
+   322  A02E9  F4BB00                W  	jmp ex3
+   323  A02EC                           fol11:
+   324  A02EC  C0FF06040000             	cmp.b sent2, 0
+   325  A02F2  6A5B                     	jz cw11
+   326  A02F4  FE01                  B  	jmp ccw11
+   327                                  	
+   328  A02F6                           ccw11:
+   329  A02F6  C0FF05040000             	cmp.b curst2, 0 	; 3-0-1
+   330  A02FC  6E19                     	jnz n01ex1
+   331  A02FE  C0FF05040100             	cmp.b curst2, 1		; 0-1-2
+   332  A0304  6E20                     	jnz n12ex1
+   333  A0306  C0FF05040200             	cmp.b curst2, 2		; 1-2-3
+   334  A030C  6E26                     	jnz n23ex1
+   335  A030E  C0FF05040300             	cmp.b curst2, 3		; 2-3-0
+   336  A0314  6E2C                     	jnz n30ex1
+   337                                  	
+   338  A0316  7EAFA21F                 n01ex1:	bnot p10_2
+   339  A031A  7EAFA31F                 		bnot p10_3
+   340  A031E  87010504              S  		add.b #1, curst2
+   341  A0322  F48200                W  		jmp ex3
+   342                                  
+   343  A0325  7EAFA01F                 n12ex1:	bnot p10_0
+   344  A0329  7EAFA11F                 		bnot p10_1
+   345  A032D  87010504              S  		add.b #1, curst2
+   346  A0331  FE73                  B  		jmp ex3
+   347                                  
+   348  A0333  7EAFA21F                 n23ex1:	bnot p10_2
+   349  A0337  7EAFA31F                 		bnot p10_3
+   350  A033B  87010504              S  		add.b #1, curst2
+   351  A033F  FE65                  B  		jmp ex3
+   352                                  
+   353  A0341  7EAFA01F                 n30ex1:	bnot p10_0
+   354  A0345  7EAFA11F                 		bnot p10_1
+   355  A0349  B70504                Z  		mov.b #0, curst2
+   356  A034C  FE58                  B  		jmp ex3
+   357                                  		
+   358  A034E                           cw11:	
+   359  A034E  C0FF05040000             	cmp.b curst2, 0 	; 3-0-1
+   360  A0354  6E19                     	jnz nn01ex1
+   361  A0356  C0FF05040100             	cmp.b curst2, 1		; 0-1-2
+   362  A035C  6E1F                     	jnz nn12ex1
+   363  A035E  C0FF05040200             	cmp.b curst2, 2		; 1-2-3
+   364  A0364  6E25                     	jnz nn23ex1
+   365  A0366  C0FF05040300             	cmp.b curst2, 3		; 2-3-0
+   366  A036C  6E2B                     	jnz nn30ex1
+   367                                  	
+   368  A036E  7EAFA01F                 nn01ex1:	bnot p10_0
+   369  A0372  7EAFA11F                 		bnot p10_1
+   370  A0376  87010504              S  		add.b #1, curst2
+   371  A037A  FE2A                  B  		jmp ex3
+* M16C FAMILY ASSEMBLER *   SOURCE LIST       Mon Jun  5 16:55:15 2017  PAGE 007
+
+  SEQ.  LOC.   OBJ.              0XMSDA ....*....SOURCE STATEMENT....7....*....8....*....9....*....0....*....1....*....2....*....3....*....4
+
+   372                                  
+   373  A037C  7EAFA21F                 nn12ex1:	bnot p10_2
+   374  A0380  7EAFA31F                 		bnot p10_3
+   375  A0384  87010504              S  		add.b #1, curst2
+   376  A0388  FE1C                  B  		jmp ex3
+   377                                  
+   378  A038A  7EAFA01F                 nn23ex1:	bnot p10_0
+   379  A038E  7EAFA11F                 		bnot p10_1
+   380  A0392  87010504              S  		add.b #1, curst2
+   381  A0396  FE0E                  B  		jmp ex3
+   382                                  
+   383  A0398  7EAFA21F                 nn30ex1:	bnot p10_2
+   384  A039C  7EAFA31F                 		bnot p10_3
+   385  A03A0  B70504                Z  		mov.b #0, curst2
+   386  A03A3  FE01                  B  		jmp ex3
+   387                                  
+   388  A03A5  FB                       ex3: 	reit
+   389                                  
+   390                                  ;----- manejador de la rutina de interrupcion del TA3 --------------------------------------
+   391                                  ;
+   392  A03A6                           sw_ta3:
+   393  A03A6  C0FF08040000             	cmp.b sent3, 0
+   394  A03AC  6A5B                     	jz cw22
+   395  A03AE  FE01                  B  	jmp ccw22
+   396                                  	
+   397  A03B0                           ccw22:
+   398  A03B0  C0FF07040000             	cmp.b curst3, 0 	; 3-0-1
+   399  A03B6  6E19                     	jnz n01ex2
+   400  A03B8  C0FF07040100             	cmp.b curst3, 1		; 0-1-2
+   401  A03BE  6E20                     	jnz n12ex2
+   402  A03C0  C0FF07040200             	cmp.b curst3, 2		; 1-2-3
+   403  A03C6  6E26                     	jnz n23ex2
+   404  A03C8  C0FF07040300             	cmp.b curst3, 3		; 2-3-0
+   405  A03CE  6E2C                     	jnz n30ex2
+   406                                  	
+   407  A03D0  7EAFA61F                 n01ex2:	bnot p10_6
+   408  A03D4  7EAFA71F                 		bnot p10_7
+   409  A03D8  87010704              S  		add.b #1, curst3
+   410  A03DC  F48300                W  		jmp ex22
+   411                                  
+   412  A03DF  7EAFA41F                 n12ex2:	bnot p10_4
+   413  A03E3  7EAFA51F                 		bnot p10_5
+   414  A03E7  87010704              S  		add.b #1, curst3
+   415  A03EB  FE74                  B  		jmp ex22
+   416                                  
+   417  A03ED  7EAFA61F                 n23ex2:	bnot p10_6
+   418  A03F1  7EAFA71F                 		bnot p10_7
+   419  A03F5  87010704              S  		add.b #1, curst3
+   420  A03F9  FE66                  B  		jmp ex22
+   421                                  
+   422  A03FB  7EAFA41F                 n30ex2:	bnot p10_4
+   423  A03FF  7EAFA51F                 		bnot p10_5
+   424  A0403  B70704                Z  		mov.b #0, curst3
+   425  A0406  FE59                  B  		jmp ex22
+   426                                  		
+   427  A0408                           cw22:
+   428  A0408  C0FF07040000             	cmp.b curst3, 0 	; 3-0-1
+   429  A040E  6E19                     	jnz nn01ex2
+   430  A0410  C0FF07040100             	cmp.b curst3, 1		; 0-1-2
+   431  A0416  6E1F                     	jnz nn12ex2
+   432  A0418  C0FF07040200             	cmp.b curst3, 2		; 1-2-3
+   433  A041E  6E25                     	jnz nn23ex2
+* M16C FAMILY ASSEMBLER *   SOURCE LIST       Mon Jun  5 16:55:15 2017  PAGE 008
+
+  SEQ.  LOC.   OBJ.              0XMSDA ....*....SOURCE STATEMENT....7....*....8....*....9....*....0....*....1....*....2....*....3....*....4
+
+   434  A0420  C0FF07040300             	cmp.b curst3, 3		; 2-3-0
+   435  A0426  6E2C                     	jnz nn30ex2
+   436                                  	
+   437  A0428  7EAFA41F                 nn01ex2:	bnot p10_4
+   438  A042C  7EAFA51F                 		bnot p10_5
+   439  A0430  87010704              S  		add.b #1, curst3
+   440  A0434  FE2B                  B  		jmp ex22
+   441                                  
+   442  A0436  7EAFA61F                 nn12ex2:	bnot p10_6
+   443  A043A  7EAFA71F                 		bnot p10_7
+   444  A043E  87010704              S  		add.b #1, curst3
+   445  A0442  FE1D                  B  		jmp ex22
+   446                                  
+   447  A0444  7EAFA41F                 nn23ex2:	bnot p10_4
+   448  A0448  7EAFA51F                 		bnot p10_5
+   449  A044C  87010704              S  		add.b #1, curst3
+   450  A0450  F44BFE                W  		jmp ex2
+   451                                  
+   452  A0453  7EAFA61F                 nn30ex2:	bnot p10_6
+   453  A0457  7EAFA71F                 		bnot p10_7
+   454  A045B  B70704                Z  		mov.b #0, curst3
+   455  A045E  FE01                  B  		jmp ex22
+   456                                  
+   457  A0460                           ex22:
+   458  A0460  C913                  Q  		add.w #1, r3
+   459  A0462  77830019                 		cmp.w #6400, r3
+   460  A0466  6E16                     		jnz fol22
+   461  A0468  E7020904              S  		cmp.b #2, movst2
+   462  A046C  6A11                     		jz mov1fin2
+   463  A046E  761F080401               		xor.b #1, sent3
+   464  A0473  D903                  Q  		mov.w #0, r3
+   465  A0475  7EAF031C                 		bnot 	ta3s 	; parar el fijador
+   466  A0479  7E9F021C                 		bset 	ta2s	; mandar a girar el brazo
+   467  A047D  FB                       fol22:	reit
+   468                                  
+   469  A047E                           mov1fin2:
+   470  A047E  761F080401               		xor.b #1, sent3
+   471  A0483  D903                  Q  		mov.w #0, r3
+   472  A0485  B70904                Z  		mov.b #0, movst2
+   473  A0488  7EAF031C                 		bnot 	ta3s
+   474  A048C  7EAF221F                 		bnot 	p2_2
+   475  A0490  FEEC                  B  		jmp 	fol22
+   476                                  ;
+   477                                  ;----- manejador de la rutina de interrupcion del INT0 --------------------------------------
+   478                                  ;
+   479  A0492                           sw_int0:
+   480  A0492  75D0                     	pop.w 	r0
+   481  A0494  73F0C003                 	mov.w 	ad0l, r0
+   482  A0498  7780C800                 	cmp.w 	#200, r0	; condicion
+   483  A049C  6807                     	jc ok
+   484  A049E  7E9F041C                 	bset 	ta4s
+   485  A04A2  FE19                  B  	jmp fin
+   486  A04A4  7E8F041C                 ok:	bclr 	ta4s
+   487  A04A8  7E8F271F                 	bclr 	p2_7
+   488  A04AC  7EBF201F                 	btst 	p2_0
+   489  A04B0  6E0B                     	jnz fin
+   490  A04B2  7EAF201F                 	bnot	p2_0
+   491  A04B6  7E9F001C                 	bset 	ta0s
+   492  A04BA  7540                     	push.w 	r0
+   493  A04BC  FB                       fin:reit
+   494                                  ;
+   495                                  ;----- manejador de la rutina de interrupcion del INT1 --------------------------------------
+* M16C FAMILY ASSEMBLER *   SOURCE LIST       Mon Jun  5 16:55:15 2017  PAGE 009
+
+  SEQ.  LOC.   OBJ.              0XMSDA ....*....SOURCE STATEMENT....7....*....8....*....9....*....0....*....1....*....2....*....3....*....4
+
+   496                                  ;
+   497  A04BD                           sw_int1:
+   498  A04BD  75D0                     	pop.w 	r0
+   499  A04BF  73F0C003                 	mov.w 	ad0l, r0
+   500  A04C3  7780C800                 	cmp.w 	#200, r0	; condicion
+   501  A04C7  6807                     	jc ok1
+   502  A04C9  7E9F041C                 	bset 	ta4s
+   503  A04CD  FE19                  B  	jmp fin1
+   504  A04CF  7E8F041C                 ok1:bclr 	ta4s
+   505  A04D3  7E8F271F                 	bclr 	p2_7
+   506  A04D7  7EBF221F                 	btst 	p2_2
+   507  A04DB  6E0B                     	jnz fin1
+   508  A04DD  7EAF221F                 	bnot	p2_2
+   509  A04E1  7E9F021C                 	bset 	ta2s
+   510  A04E5  7540                     	push.w 	r0
+   511  A04E7  FB                       fin1:reit
+   512                                  ;
+   513                                  ;----- manejador de la rutina de interrupcion del TA3 --------------------------------------
+   514                                  ;
+   515  A04E8                           sw_ta4:
+   516  A04E8  87010A04              S  	add.b 	#1, r4
+   517  A04EC  C0FF0A04C800             	cmp.b 	r4, 200
+   518  A04F2  6E09                     	jnz go
+   519  A04F4  D90F0A04              Q  	mov.w 	#0, r4
+   520  A04F8  7EAF271F                 	bnot 	p2_7
+   521  A04FC  FB                       go:	reit
+   522                                  ;
+   523                                  ;----- manejador de la rutina dummy --------------------------------------------------------
+   524                                  ;
+   525  A04FD                           dummy:
+   526  A04FD  FB                       	reit
+   527                                  ;
+   528                                  ;----- interrupci¢n del temporizador TA0 (tabla de vectores variable) ----------------------
+   529                                  	.section	int_ta0,romdata
+   530  FA000                           	.org		Vintbase
+   531  FA000                           Tabla_Vector_Usuario:
+   532  FA000  FD040A00                 	.lword		dummy		; No0  Break Interrupt
+   533  FA004  FD040A00                 	.lword		dummy		; No1  Break Interrupt
+   534  FA008  FD040A00                 	.lword		dummy		; No2  Break Interrupt
+   535  FA00C  FD040A00                 	.lword		dummy		; No3  Break Interrupt
+   536  FA010  FD040A00                 	.lword		dummy		; No4  Break Interrupt
+   537  FA014  FD040A00                 	.lword		dummy		; No5  Break Interrupt
+   538  FA018  FD040A00                 	.lword		dummy		; No6  Break Interrupt
+   539  FA01C  FD040A00                 	.lword		dummy		; No7  Break Interrupt
+   540  FA020  FD040A00                 	.lword		dummy		; No8  Break Interrupt
+   541  FA024  FD040A00                 	.lword		dummy		; No9  Break Interrupt
+   542  FA028  FD040A00                 	.lword		dummy		; No10 Bus Clash Detect
+   543  FA02C  FD040A00                 	.lword		dummy		; No11 DMA0 
+   544  FA030  FD040A00                 	.lword		dummy		; No12 DMA1 
+   545  FA034  FD040A00                 	.lword		dummy		; No13 KEY IN Interrupt
+   546  FA038  FD040A00                 	.lword		dummy	   	; No14 A-D Interrupt
+   547  FA03C  FD040A00                 	.lword		dummy		; No15 UART2 Transmission Interrupt
+   548  FA040  FD040A00                 	.lword		dummy		; No16 UART2 receive Interrupt
+   549  FA044  FD040A00                 	.lword		dummy		; No17 UART0 Transmission Interrupt
+   550  FA048  FD040A00                 	.lword		dummy		; No18 UART0 receive Interrupt
+   551  FA04C  00F90F00                 	.lword		0FF900H	; No19 UART1 Transmission Interrupt
+   552  FA050  00F90F00                 	.lword		0FF900H	; No20 UART1 receive Interrupt
+   553  FA054  0B010A00                 	.lword		sw_ta0	; No21 TimerA0 Interrupt
+   554  FA058  E3010A00                 	.lword		sw_ta1  ; No22 TimerA1 Interrupt
+   555  FA05C  CE020A00                 	.lword		sw_ta2	; No23 TimerA2 Interrupt
+   556  FA060  A6030A00                 	.lword		sw_ta3	; No24 TimerA3 Interrupt
+   557  FA064  E8040A00                 	.lword		sw_ta4	; No25 TimerA4 Interrupt
+* M16C FAMILY ASSEMBLER *   SOURCE LIST       Mon Jun  5 16:55:15 2017  PAGE 010
+
+  SEQ.  LOC.   OBJ.              0XMSDA ....*....SOURCE STATEMENT....7....*....8....*....9....*....0....*....1....*....2....*....3....*....4
+
+   558  FA068  FD040A00                 	.lword		dummy		; No26 TimerB0 Interrupt
+   559  FA06C  FD040A00                 	.lword		dummy		; No27 TimerB1 Interrupt
+   560  FA070  FD040A00                 	.lword		dummy		; No28 TimerB2 Interrupt
+   561  FA074  92040A00                 	.lword		sw_int0	; No29 INIT0(Active Low) Interrupt
+   562  FA078  BD040A00                 	.lword		sw_int1	; No30 INIT1(Active Low) Interrupt
+   563  FA07C  FD040A00                 	.lword		dummy		; No31 INIT2(Active Low) Interrupt
+   564  FA080  FD040A00                 	.lword		dummy		; No32 S/W Interrupt
+   565  FA084  FD040A00                 	.lword		dummy		; No33 S/W Interrupt
+   566  FA088  FD040A00                 	.lword		dummy		; No34 S/W Interrupt
+   567  FA08C  FD040A00                 	.lword		dummy		; No35 S/W Interrupt
+   568  FA090  FD040A00                 	.lword		dummy		; No36 S/W Interrupt
+   569  FA094  FD040A00                 	.lword		dummy		; No37 S/W Interrupt
+   570  FA098  FD040A00                 	.lword		dummy		; No38 S/W Interrupt
+   571  FA09C  FD040A00                 	.lword		dummy		; No39 S/W Interrupt
+   572  FA0A0  FD040A00                 	.lword		dummy		; No40 S/W Interrupt
+   573  FA0A4  FD040A00                 	.lword		dummy		; No41 S/W Interrupt
+   574  FA0A8  FD040A00                 	.lword		dummy		; No42 S/W Interrupt
+   575  FA0AC  FD040A00                 	.lword		dummy		; No43 S/W Interrupt
+   576  FA0B0  FD040A00                 	.lword		dummy		; No44 S/W Interrupt
+   577  FA0B4  FD040A00                 	.lword		dummy		; No45 S/W Interrupt
+   578  FA0B8  FD040A00                 	.lword		dummy		; No46 S/W Interrupt
+   579  FA0BC  FD040A00                 	.lword		dummy		; No47 S/W Interrupt
+   580  FA0C0  FD040A00                 	.lword		dummy		; No48 S/W Interrupt
+   581  FA0C4  FD040A00                 	.lword		dummy		; No49 S/W Interrupt
+   582  FA0C8  FD040A00                 	.lword		dummy		; No50 S/W Interrupt
+   583  FA0CC  FD040A00                 	.lword		dummy		; No51 S/W Interrupt
+   584  FA0D0  FD040A00                 	.lword		dummy		; No52 S/W Interrupt
+   585  FA0D4  FD040A00                 	.lword		dummy		; No53 S/W Interrupt
+   586  FA0D8  FD040A00                 	.lword		dummy		; No54 S/W Interrupt
+   587  FA0DC  FD040A00                 	.lword		dummy		; No55 S/W Interrupt
+   588  FA0E0  FD040A00                 	.lword		dummy		; No56 S/W Interrupt
+   589  FA0E4  FD040A00                 	.lword		dummy		; No57 S/W Interrupt
+   590  FA0E8  FD040A00                 	.lword		dummy		; No58 S/W Interrupt
+   591  FA0EC  FD040A00                 	.lword		dummy		; No59 S/W Interrupt
+   592  FA0F0  FD040A00                 	.lword		dummy		; No60 S/W Interrupt
+   593  FA0F4  FD040A00                 	.lword		dummy		; No61 S/W Interrupt
+   594  FA0F8  FD040A00                 	.lword		dummy		; No62 S/W Interrupt
+   595  FA0FC  FD040A00                 	.lword		dummy		; No63 S/W Interrupt
+   596                                  ;
+   597                                  ;----- interrupci¢n de reset (tabla de vectores fija) ------------------------------------------
+   598                                  ;
+   599                                  	.section	int_reset,romdata
+   600  FFFFC                           	.org		Vvector+(8*4)
+   601  FFFFC  00000A00                 	.lword		reset
+   602                                  ;
+   603                                  ;----- program end -----------------------------------------------------------------------------
+   604                                  ;
+   605                                  	.end
+
+Information List
+
+TOTAL ERROR(S)    00000
+TOTAL WARNING(S)  00000
+TOTAL LINE(S)     00605   LINES
+
+Section List
+
+Attr        Size          Name
+DATA     0000011(0000BH)  memory
+CODE     0001278(004FEH)  prog
+ROMDATA  0000256(00100H)  int_ta0
+ROMDATA  0000004(00004H)  int_reset
